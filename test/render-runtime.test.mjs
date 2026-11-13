@@ -219,8 +219,8 @@ test('runtime passes a context-matching quota cache to render and refresh', asyn
   assert.equal(gitCachePath, paths.gitStatusCachePath);
   assert.ok(result.line.includes('git:(main*)'));
   // The matching cache is shown as current quota.
-  assert.ok(result.line.includes('5h ███        31%'));
-  assert.ok(result.line.includes('7d ██         25%'));
+  assert.ok(result.line.includes('5h ███        31.00%'));
+  assert.ok(result.line.includes('7d ██         25.00%'));
 });
 
 test('a [models."x".upgrade] subtable keeps provider attribution and the quota gate', async () => {
@@ -285,8 +285,8 @@ test('a [models."x".upgrade] subtable keeps provider attribution and the quota g
     },
   });
   assert.equal(refreshOptions.cachedQuota, cachedQuota);
-  assert.ok(result.line.includes('5h ███        31%'));
-  assert.ok(result.line.includes('7d ██         25%'));
+  assert.ok(result.line.includes('5h ███        31.00%'));
+  assert.ok(result.line.includes('7d ██         25.00%'));
   // The sibling subtable must not leak its migration text into the footer.
   assert.equal(result.line.includes('k3-latest'), false);
   assert.equal(result.line.includes('opus 5'), false);
@@ -485,7 +485,7 @@ test('a same-slot credential swap hides the cache and reschedules under the new 
     return { result, refreshOptions };
   };
   const before = await runFrame();
-  assert.ok(before.result.line.includes('5h ███        31%'));
+  assert.ok(before.result.line.includes('5h ███        31.00%'));
   assert.equal(before.refreshOptions.contextKey, keyA);
   assert.equal(before.refreshOptions.cachedQuota, cacheA);
 
@@ -917,7 +917,7 @@ display_name = "DeepSeek V4.1 Flash"
     },
   });
   assert.equal(usageRefresh.target.credentialFingerprint, target.credentialFingerprint);
-  assert.match(result.line, /OpenCode Go 5h [█ ]+1% ~2h30m · 7d [█ ]+4% ~2d14h · mo [█ ]+2%/);
+  assert.match(result.line, /OpenCode Go 5h [█ ]+1\.00% ~2h30m · 7d [█ ]+4\.00% ~2d14h · mo [█ ]+2\.00%/);
   assert.doesNotMatch(result.line, /Balance|quota/i);
 });
 

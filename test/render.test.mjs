@@ -46,17 +46,17 @@ test('ratio quota displays monthly total and derives kimi as total minus code', 
   } });
   for (const layout of ['normal', 'compact']) {
     const [line] = renderHud(baseCtx({ layout, quota: { fetchedAt: NOW, ...parsed } }));
-    assert.match(line, /5h (?:█+ +)?25%/);
-    assert.match(line, /mo (?:█+ +)?60% \(kimi 40% · code 20%\)/);
+    assert.match(line, /5h (?:█+ +)?25\.00%/);
+    assert.match(line, /mo (?:█+ +)?60\.00% \(kimi 40\.00% · code 20\.00%\)/);
     assert.doesNotMatch(line, /kimi 60%|NaN|undefined/);
   }
 });
 
 test('weekly-only and monthly-only plans remain visible in compact layout', () => {
   for (const [usages, expected] of [
-    [{ limit_7d: { used_ratio: 0 } }, /7d 0%/],
-    [{ limit_month_total: { used_ratio: 0.6 } }, /mo 60%/],
-    [{ limit_month_code: { used_ratio: 0.2 } }, /mo code 20%/],
+    [{ limit_7d: { used_ratio: 0 } }, /7d 0\.00%/],
+    [{ limit_month_total: { used_ratio: 0.6 } }, /mo 60\.00%/],
+    [{ limit_month_code: { used_ratio: 0.2 } }, /mo code 20\.00%/],
   ]) {
     const [line] = renderHud(baseCtx({ layout: 'compact', quota: {
       fetchedAt: NOW, ...parseQuotaPayload({ usages }),
@@ -74,7 +74,7 @@ test('ratio quota keeps freshness, reset countdown and finite display boundaries
   const quota = { ...parsed, fetchedAt: NOW - QUOTA_STALE_MARK_MS - 1 };
   const [stale] = renderHud(baseCtx({ layout: 'compact', quota }));
   assert.match(stale, /5h 120% ~2h18m/);
-  assert.match(stale, /kimi 0% · code 20%/);
+  assert.match(stale, /kimi 0\.00% · code 20\.00%/);
   assert.match(stale, /\[stale\]/);
   const [expired] = renderHud(baseCtx({ quota: { ...quota, fetchedAt: NOW - QUOTA_STALE_MAX_MS - 1 } }));
   assert.doesNotMatch(expired, /mo 10%|120%/);
@@ -86,7 +86,7 @@ test('ratio quota keeps freshness, reset countdown and finite display boundaries
 
 test('ratio quota only displays 100% when usage reaches the full allowance', () => {
   for (const layout of ['normal', 'compact']) {
-    for (const [usedRatio, expected] of [[0.994, '99%'], [0.995, '99%'], [0.999, '99%'], [1, '100%'], [1.2, '120%']]) {
+    for (const [usedRatio, expected] of [[0.994, '99.40%'], [0.995, '99.50%'], [0.999, '99.90%'], [1, '100%'], [1.2, '120%']]) {
       const [line] = renderHud(baseCtx({
         layout,
         quota: quotaAt(null, [{ label: '5h', usedRatio }]),
@@ -138,7 +138,7 @@ test('compact layout: model, git, speed, window pct + countdown', () => {
   assert.equal(parts[0], '[Always Ask] K3');
   assert.equal(parts[1], 'git:(main*)');
   assert.equal(parts[2], '⚡ 47');
-  assert.equal(parts[3], '5h 31% ~2h18m');
+  assert.equal(parts[3], '5h 31.00% ~2h18m');
   assert.equal(parts.length, 4); // no project, no bar, no weekly
 });
 
@@ -146,7 +146,7 @@ test('normal layout adds project, t/s+TTFT, countdown and weekly', () => {
   const [line] = renderHud(baseCtx({ layout: 'normal' }));
   assert.equal(
     line,
-    '[Always Ask] K3 │ kimi-code-hud git:(main*) │ ⚡ 47 t/s · TTFT 1.3s │ 5h ███        31% ~2h18m · 7d ██         25% ~3d2h',
+    '[Always Ask] K3 │ kimi-code-hud git:(main*) │ ⚡ 47 t/s · TTFT 1.3s │ 5h ███        31.00% ~2h18m · 7d ██         25.00% ~3d2h',
   );
 });
 
@@ -158,8 +158,8 @@ test('normal layout shows zero quota usage with its reset countdown', () => {
       [{ label: '5h', used: 0, limit: 100, resetAt: '2026-07-30T12:18:00Z' }],
     ),
   }));
-  assert.ok(line.includes(`5h ${' '.repeat(10)} 0% ~2h18m`));
-  assert.ok(line.includes(`7d ${' '.repeat(10)} 0% ~3d2h`));
+  assert.ok(line.includes(`5h ${' '.repeat(10)} 0.00% ~2h18m`));
+  assert.ok(line.includes(`7d ${' '.repeat(10)} 0.00% ~3d2h`));
 });
 
 test('provider balance uses currency-aware compact text instead of a quota bar', () => {
@@ -204,7 +204,7 @@ test('provider balance renders without granted/topped-up components, and mcp win
       ],
     },
   }));
-  assert.match(windows, /Zhipu Pro 5h [█ ]*25% ~2h18m · 7d [█ ]*9% · mcp [█ ]*22%/);
+  assert.match(windows, /Zhipu Pro 5h [█ ]*25\.00% ~2h18m · 7d [█ ]*9\.00% · mcp [█ ]*22\.40%/);
 });
 
 test('provider balance reports unavailable and dims stale cache', () => {
@@ -678,20 +678,20 @@ test('compact layout colors the quota percentage by level, green stays default',
   );
   // Green level (<60%): no color — comfortable usage shouldn't stand out.
   const [green] = renderHud(baseCtx({ layout: 'compact', color: true, quota: quotaAtLevel(31) }));
-  assert.ok(green.includes('5h 31% ~2h18m'));
+  assert.ok(green.includes('5h 31.00% ~2h18m'));
   // Yellow (>=60%) and red (>=85%) paint the bare percentage, taking over
   // the level signal the compact layout's missing bar would carry.
   const [yellow] = renderHud(baseCtx({ layout: 'compact', color: true, quota: quotaAtLevel(70) }));
-  assert.ok(yellow.includes('5h \x1b[38;2;249;226;175m70%\x1b[0m ~2h18m'));
+  assert.ok(yellow.includes('5h \x1b[38;2;249;226;175m70.00%\x1b[0m ~2h18m'));
   const [red] = renderHud(baseCtx({ layout: 'compact', color: true, quota: quotaAtLevel(90) }));
-  assert.ok(red.includes('5h \x1b[38;2;243;139;168m90%\x1b[0m ~2h18m'));
+  assert.ok(red.includes('5h \x1b[38;2;243;139;168m90.00%\x1b[0m ~2h18m'));
   // Light theme uses its calmer truecolor hues; colors off stays plain.
   const [light] = renderHud(baseCtx({
     layout: 'compact', color: true, theme: 'light', quota: quotaAtLevel(90),
   }));
-  assert.ok(light.includes('5h \x1b[38;2;185;28;28m90%\x1b[0m ~2h18m'));
+  assert.ok(light.includes('5h \x1b[38;2;185;28;28m90.00%\x1b[0m ~2h18m'));
   const [plain] = renderHud(baseCtx({ layout: 'compact', quota: quotaAtLevel(90) }));
-  assert.ok(plain.includes('5h 90% ~2h18m'));
+  assert.ok(plain.includes('5h 90.00% ~2h18m'));
   assert.ok(!plain.includes('\x1b['));
 });
 
@@ -1032,7 +1032,7 @@ test('swarm with two subagents renders the fleet style verbatim', () => {
   const [normal] = renderHud(baseCtx({ layout: 'normal', metrics }));
   assert.equal(
     normal,
-    '[Always Ask] [swarm] K3 │ kimi-code-hud git:(main*) │ ⚡ 90 t/s (2 agents @45) · TTFT 1.3s │ 5h ███        31% ~2h18m · 7d ██         25% ~3d2h',
+    '[Always Ask] [swarm] K3 │ kimi-code-hud git:(main*) │ ⚡ 90 t/s (2 agents @45) · TTFT 1.3s │ 5h ███        31.00% ~2h18m · 7d ██         25.00% ~3d2h',
   );
 });
 
@@ -1147,14 +1147,14 @@ test('quota one tick past the TTL dims without the [stale] marker (aging tier)',
   // no text marker, because the first frame after a few minutes away would
   // otherwise always cry wolf.
   const [plain] = renderHud(baseCtx({ layout: 'normal', color: false, quota: aging }));
-  assert.ok(plain.includes('5h ███        31% ~2h18m · 7d ██         25% ~3d2h'));
+  assert.ok(plain.includes('5h ███        31.00% ~2h18m · 7d ██         25.00% ~3d2h'));
   assert.ok(!plain.includes('[stale]'));
   // Color: the segment dims piecewise — muted label and figures around a
   // self-styled dim gauge whose track strip stays visible.
   const [ansi] = renderHud(baseCtx({ layout: 'normal', color: true, quota: aging }));
   assert.match(
     ansi,
-    /\x1b\[38;2;147;153;178m5h \x1b\[0m\x1b\[38;2;147;153;178m███\x1b\[0m\x1b\[48;2;69;71;90m {7}\x1b\[0m\x1b\[38;2;147;153;178m 31% ~2h18m\x1b\[0m/,
+    /\x1b\[38;2;147;153;178m5h \x1b\[0m\x1b\[38;2;147;153;178m███\x1b\[0m\x1b\[48;2;69;71;90m {7}\x1b\[0m\x1b\[38;2;147;153;178m 31\.00% ~2h18m\x1b\[0m/,
   );
   assert.ok(!ansi.includes('[stale]'));
 });
@@ -1167,12 +1167,12 @@ test('quota past the one-hour mark gains the plain [stale] marker', () => {
   };
   // Monochrome: the marker alone tells the reader the figures are old.
   const [plain] = renderHud(baseCtx({ layout: 'normal', color: false, quota: marked }));
-  assert.ok(plain.includes('5h ███        31% ~2h18m · 7d ██         25% ~3d2h [stale]'));
+  assert.ok(plain.includes('5h ███        31.00% ~2h18m · 7d ██         25.00% ~3d2h [stale]'));
   // Color: same piecewise dim; the marker joins as its own muted tail.
   const [ansi] = renderHud(baseCtx({ layout: 'normal', color: true, quota: marked }));
   assert.match(
     ansi,
-    /\x1b\[38;2;147;153;178m7d \x1b\[0m\x1b\[38;2;147;153;178m██\x1b\[0m\x1b\[48;2;69;71;90m {8}\x1b\[0m\x1b\[38;2;147;153;178m 25% ~3d2h\x1b\[0m\x1b\[38;2;147;153;178m \[stale\]\x1b\[0m/,
+    /\x1b\[38;2;147;153;178m7d \x1b\[0m\x1b\[38;2;147;153;178m██\x1b\[0m\x1b\[48;2;69;71;90m {8}\x1b\[0m\x1b\[38;2;147;153;178m 25\.00% ~3d2h\x1b\[0m\x1b\[38;2;147;153;178m \[stale\]\x1b\[0m/,
   );
 });
 
@@ -1184,18 +1184,18 @@ test('quota age tiers hold at the exact boundaries', () => {
   }))[0];
   // =TTL: fresh — normal brightness, no marker, no dim.
   const fresh = at(QUOTA_TTL_MS);
-  assert.ok(fresh.includes('5h 31%'));
+  assert.ok(fresh.includes('5h 31.00%'));
   assert.ok(!fresh.includes('[stale]'));
   assert.ok(!fresh.includes('\x1b[38;2;147;153;178m5h'));
   // TTL+1 and =1h: aging — dimmed without the marker.
   assert.ok(!at(QUOTA_TTL_MS + 1).includes('[stale]'));
   const hourOld = at(QUOTA_STALE_MARK_MS);
-  assert.ok(hourOld.includes('5h 31%'));
+  assert.ok(hourOld.includes('5h 31.00%'));
   assert.ok(!hourOld.includes('[stale]'));
   // 1h+1: marked stale.
-  assert.ok(at(QUOTA_STALE_MARK_MS + 1).includes('5h 31% [stale]'));
+  assert.ok(at(QUOTA_STALE_MARK_MS + 1).includes('5h 31.00% [stale]'));
   // =7d: still usable, with the marker (detailed in the tests below).
-  assert.ok(at(QUOTA_STALE_MAX_MS).includes('5h 31% [stale]'));
+  assert.ok(at(QUOTA_STALE_MAX_MS).includes('5h 31.00% [stale]'));
   // 7d+1: hidden entirely (detailed in the tests below).
   assert.ok(!at(QUOTA_STALE_MAX_MS + 1).includes('5h'));
 });
@@ -1232,14 +1232,14 @@ test('quota at exactly the stale ceiling is still usable with the marker', () =>
     windows: [{ label: '5h', used: 31, limit: 100, resetAt: '2026-07-30T12:18:00Z' }],
   };
   const [line] = renderHud(baseCtx({ layout: 'compact', quota: boundary }));
-  assert.ok(line.includes('5h 31% ~2h18m [stale]'));
+  assert.ok(line.includes('5h 31.00% ~2h18m [stale]'));
 });
 
 test('future-stamped quota: small clock skew stays fresh, big rollback hides', () => {
   const windows = [{ label: '5h', used: 31, limit: 100 }];
   const nearFuture = { fetchedAt: NOW + 60_000, weekly: null, windows };
   const [fresh] = renderHud(baseCtx({ layout: 'compact', quota: nearFuture }));
-  assert.ok(fresh.includes('5h 31%'));
+  assert.ok(fresh.includes('5h 31.00%'));
   assert.ok(!fresh.includes('[stale]'));
 
   const rolledBack = { fetchedAt: NOW + QUOTA_CLOCK_SKEW_MS + 60_000, weekly: null, windows };
@@ -1268,7 +1268,7 @@ test('provider usage windows share the quota gauge presentation', () => {
   // Same gauge bar as the managed quota segment: width-10 track, one block
   // per 10% used.
   assert.ok(line.endsWith(
-    ' │ OpenCode Go 5h ██         24% ~2h18m · 7d █          10% ~3d2h · mo            2%',
+    ' │ OpenCode Go 5h ██         24.00% ~2h18m · 7d █          10.00% ~3d2h · mo            2.00%',
   ));
 
   const [compact] = renderHud(baseCtx({
@@ -1277,7 +1277,7 @@ test('provider usage windows share the quota gauge presentation', () => {
     providerUsage: { kind: 'windows', label: 'OpenCode Go', windows },
   }));
   // Compact drops the bar, like quota windows.
-  assert.ok(compact.endsWith(' │ OpenCode Go 5h 24% ~2h18m · 7d 10% ~3d2h · mo 2%'));
+  assert.ok(compact.endsWith(' │ OpenCode Go 5h 24.00% ~2h18m · 7d 10.00% ~3d2h · mo 2.00%'));
   assert.doesNotMatch(compact, /█/);
 
   const [stale] = renderHud(baseCtx({
@@ -1291,7 +1291,7 @@ test('provider usage windows share the quota gauge presentation', () => {
   // Stale dims brand, label, bar and figures separately, like stale quota.
   assert.match(stale, /\x1b\[38;2;147;153;178mOpenCode Go\x1b\[0m/);
   assert.match(stale, /\x1b\[38;2;147;153;178m5h \x1b\[0m/);
-  assert.match(stale, /\x1b\[38;2;147;153;178m 50%\x1b\[0m/);
+  assert.match(stale, /\x1b\[38;2;147;153;178m 50\.00%\x1b\[0m/);
 
   const [invalid] = renderHud(baseCtx({
     quota: null,

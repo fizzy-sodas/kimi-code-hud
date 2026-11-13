@@ -494,8 +494,9 @@ function cacheSegment({ metrics, color, C }) {
 function formatUsageWindow({ label, entry, stale, layout, color, useLevelColor, now, C }) {
   const fraction = quotaFraction(entry);
   if (fraction === null) return null;
-  const percentage = fraction < 1 ? Math.min(99, Math.round(fraction * 100)) : Math.round(fraction * 100);
-  const pct = `${percentage}%`;
+  const pct = fraction < 1
+    ? `${Math.min(99.99, fraction * 100).toFixed(2)}%`
+    : `${Math.round(fraction * 100)}%`;
   const countdown = formatCountdown(entry.resetAt, now);
   const suffix = countdown ? ` ${countdown}` : '';
   const dim = (text) => colorize(color, C.muted, text);
@@ -553,7 +554,7 @@ function quotaSegment({ layout, quota, color, now, C }) {
       // Follow the upstream breakdown's subtraction and floating-point clamp.
       const codeRatio = Math.min(code, 1);
       const kimiRatio = Math.max(0, Math.min(Math.round((total - codeRatio) * 1e6) / 1e6, 1));
-      text += ` (kimi ${Math.round(kimiRatio * 100)}% · code ${Math.round(codeRatio * 100)}%)`;
+      text += ` (kimi ${(kimiRatio * 100).toFixed(2)}% · code ${(codeRatio * 100).toFixed(2)}%)`;
     }
     parts.push(text);
   } else if (code !== null) {
