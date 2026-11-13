@@ -20,8 +20,8 @@ export const METRICS_STATE_V = 9;
  * durations are the fresh answer to "how fast / how long" right after a task
  * ends, and dimming them the instant activity stops reads as breakage.
  * Past the window they fade to the muted post-settle dim until the next live
- * timer takes over. Matches the quota TTL scale — long enough to cover the
- * moment the user looks back at the footer, short enough not to masquerade
- * as a live reading.
+ * timer takes over. One minute — long enough to cover the moment the user
+ * looks back at the footer, short enough not to masquerade as a live
+ * reading.
  */
 export const SETTLE_LINGER_MS = 60_000;

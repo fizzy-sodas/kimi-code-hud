@@ -6,6 +6,7 @@ import os from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { REQUEST_CATEGORY, shortDigest, readRefreshState, recordRefreshFailure } from '../src/request-guard.mjs';
+import { SETTLE_LINGER_MS } from '../src/metrics-constants.mjs';
 import {
   parseQuotaPayload,
   deriveWindowLabel,
@@ -28,6 +29,8 @@ import {
   QUOTA_RESULT,
   QUOTA_TTL_MS,
   QUOTA_REFRESH_MARGIN_MS,
+  QUOTA_IDLE_TTL_MS,
+  quotaTtlForSession,
   QUOTA_CACHE_VERSION,
   QUOTA_STALE_MARK_MS,
   QUOTA_STALE_MAX_MS,
@@ -276,6 +279,53 @@ test('the refresh scheduler works one tier ahead of the display boundary', () =>
   // The next frame is repelled by the refresh lock, not by freshness.
   assert.equal(ensureFreshQuota(opts(marginEnd + 2)), false);
   assert.equal(spawns, 1);
+});
+
+test('quotaTtlForSession picks the busy cadence only while the session consumes quota', () => {
+  const now = 500_000;
+  assert.equal(quotaTtlForSession(null, now), QUOTA_IDLE_TTL_MS);
+  assert.equal(quotaTtlForSession({}, now), QUOTA_IDLE_TTL_MS);
+  assert.equal(quotaTtlForSession({ turnStartedAt: now - 1000 }, now), QUOTA_TTL_MS);
+  assert.equal(quotaTtlForSession({ compactingSince: now - 1000 }, now), QUOTA_TTL_MS);
+  // A just-settled turn keeps the busy cadence through the settle grace —
+  // the user is still reading the footer and the final usage has just landed.
+  assert.equal(quotaTtlForSession({ genSettledAt: now - SETTLE_LINGER_MS }, now), QUOTA_TTL_MS);
+  assert.equal(quotaTtlForSession({ genSettledAt: now - SETTLE_LINGER_MS - 1 }, now), QUOTA_IDLE_TTL_MS);
+});
+
+test('the refresh scheduler honors the session-aware ttlMs tier', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-hud-quota-ttl-'));
+  const cache = {
+    version: QUOTA_CACHE_VERSION,
+    contextKey: DUMMY_CONTEXT_KEY,
+    fetchedAt: 100_000,
+    weekly: null,
+    windows: [],
+  };
+  let spawns = 0;
+  const spawnImpl = () => { spawns += 1; return { once() {}, unref() {} }; };
+  // A fresh lock per call: the lock, not freshness, is what repels repeats.
+  const opts = (now, ttlMs, lock) => ({
+    cachePath: path.join(dir, 'unused-cache.json'),
+    lockPath: path.join(dir, lock),
+    scriptPath: '/tmp/fake-kimi-hud.mjs',
+    now,
+    ttlMs,
+    cachedQuota: cache,
+    spawnImpl,
+    tokenFactory: () => 'fixed',
+  });
+  // Age 30s: due under the busy 10s window...
+  assert.equal(ensureFreshQuota(opts(100_000 + 30_000, QUOTA_TTL_MS, 'a.lock')), true);
+  assert.equal(spawns, 1);
+  // ...but quiet under the idle window until that window itself opens.
+  assert.equal(ensureFreshQuota(opts(100_000 + 30_000, QUOTA_IDLE_TTL_MS, 'b.lock')), false);
+  assert.equal(spawns, 1);
+  assert.equal(
+    ensureFreshQuota(opts(100_000 + QUOTA_IDLE_TTL_MS + 1, QUOTA_IDLE_TTL_MS, 'c.lock')),
+    true,
+  );
+  assert.equal(spawns, 2);
 });
 
 test('quotaAge draws the fresh/stale/expired boundaries exactly', () => {

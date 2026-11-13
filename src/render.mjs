@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { formatGoalBadge } from './goal.mjs';
 import { SETTLE_LINGER_MS } from './metrics-constants.mjs';
-import { QUOTA_AGE, quotaAge } from './quota.mjs';
+import { QUOTA_AGE, quotaAge, quotaTtlForSession } from './quota.mjs';
 
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
@@ -513,19 +513,21 @@ function formatUsageWindow({ label, entry, stale, layout, color, useLevelColor, 
   return `${label} ${bar(fraction, useLevelColor, C)} ${pct}${suffix}`;
 }
 
-function quotaSegment({ layout, quota, color, now, C }) {
+function quotaSegment({ layout, quota, metrics, color, now, C }) {
   if (!quota) return null;
   // The age contract lives in quota.mjs so rendering and the refresh
   // scheduler share one boundary: fresh figures render normally, stale ones
   // stay visible but dimmed, and anything past the maximum stale age (or
   // stamped impossibly far in the future) is dropped — seven-day-old numbers
-  // must never be presented the same as fresh ones. The stale state itself
-  // tiers: within QUOTA_STALE_MARK_MS ("aging" — the first hour, which is
-  // also the background refresh cadence, so returning after a few minutes
-  // lands here) the dim alone signals age because window figures that young
-  // are almost certainly still valid; past it the literal `[stale]` marker
-  // joins the dim for figures old enough to be genuinely doubted.
-  const age = quotaAge(quota, now);
+  // must never be presented the same as fresh ones. The fresh window itself
+  // is session-aware (quotaTtlForSession): ~10s while the session is busy,
+  // minutes when idle. The stale state tiers: within QUOTA_STALE_MARK_MS
+  // ("aging" — the first hour, far longer than the ~10s busy refresh
+  // cadence, so returning after a few minutes lands here) the dim alone
+  // signals age because window figures that young are almost certainly still
+  // valid; past it the literal `[stale]` marker joins the dim for figures old
+  // enough to be genuinely doubted.
+  const age = quotaAge(quota, now, quotaTtlForSession(metrics, now));
   if (age.state === QUOTA_AGE.EXPIRED) return null;
   const stale = age.state === QUOTA_AGE.STALE;
   const markStale = stale && age.markStale === true;

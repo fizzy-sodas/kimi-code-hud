@@ -475,7 +475,7 @@ Resolution:
   sending;
 - the render hot path never parses config.toml and `quota.json` carries no
   account, credential-slot, or endpoint tag. After an account or region
-  switch, the previous figures may continue to render; the 60s TTL marks the
+  switch, the previous figures may continue to render; the quota TTL marks the
   cache stale and schedules refresh but does not evict it. A successful
   refresh replaces the value, while repeated 401/403 responses with a
   remaining `refresh_token` may preserve the stale value beyond one TTL.
@@ -491,7 +491,7 @@ Acceptance criteria:
   slot;
 - after an account or region switch, refresh targets the newly resolved
   endpoint and a successful response replaces the cache; until then the
-  previous value may remain and is marked stale after the 60s TTL;
+  previous value may remain and is marked stale after the quota TTL;
 - regression tests cover all of the above (`test/quota.test.mjs`).
 
 Update: the render data plane now compares the cache's schema-v3
@@ -507,7 +507,7 @@ Update: the stale state also tiers for display now — figures past the 60s
 TTL dim immediately, but the literal `[stale]` marker only joins once the
 cache is more than an hour old, so the first frame after a short
 away-from-keyboard gap no longer reads as a staleness warning. The
-scheduler-side meaning of the 60s TTL (refresh-worthy) is unchanged.
+scheduler-side meaning of the quota TTL (refresh-worthy) is unchanged.
 
 ## KI-13: Tracked showcase PNGs had drifted from current rendering behavior
 
@@ -683,7 +683,7 @@ What this guarantees:
 
 - a cache whose tag no longer matches the current credential content is never
   shown: the figures render as absent until a refresh for the current content
-  succeeds (normally within one 60s TTL);
+  succeeds (normally within one quota TTL);
 - a refresh that started before the change discards its result: the write-path
   guard re-reads the live credential file and refuses to write, delete, or
   record backoff once the content fingerprint differs from the one the

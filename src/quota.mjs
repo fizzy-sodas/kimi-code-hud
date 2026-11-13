@@ -27,17 +27,43 @@ import {
   requestJsonWithLimits,
   shortDigest,
 } from './request-guard.mjs';
+import { SETTLE_LINGER_MS } from './metrics-constants.mjs';
 
 export { HUD_DIR, CREDENTIALS_PATH, QUOTA_CACHE_PATH, QUOTA_REFRESH_STATE_PATH, REFRESH_LOCK_PATH };
 export const USAGES_URL = 'https://api.kimi.com/coding/v1/usages';
 export const GLOBAL_USAGES_URL = 'https://api.kimi.ai/coding/v1/usages';
-export const QUOTA_TTL_MS = 60_000;
+export const QUOTA_TTL_MS = 10_000;
 // The refresh scheduler starts this far ahead of the fresh window's end, so
 // the detached refresh (subprocess start + HTTPS + cache write) is in flight
 // before the renderer's dim boundary is reached. Without the margin every TTL
-// expired as a white → dim → white flicker about a second long.
-export const QUOTA_REFRESH_MARGIN_MS = 10_000;
+// expired as a white → dim → white flicker about a second long. Sized well
+// under the TTL so the cadence stays ~10s; a 10s margin would fire every frame.
+export const QUOTA_REFRESH_MARGIN_MS = 2_000;
 export const LOCK_STALE_MS = 30_000;
+// Idle sessions consume no quota, so both the display's fresh window and the
+// refresh cadence relax to this tier; quotaTtlForSession picks per frame.
+export const QUOTA_IDLE_TTL_MS = 5 * 60_000;
+
+/**
+ * Session-aware fresh window. While a turn is generating, a compaction is
+ * running, or a turn has just settled (the same SETTLE_LINGER_MS grace the
+ * speed slot holds its bright figures for — the user is still looking at the
+ * footer and the last turn's consumption has just landed), quota changes live
+ * and figures refresh at the busy QUOTA_TTL_MS cadence. Otherwise nothing is
+ * consuming quota and the cache may age up to QUOTA_IDLE_TTL_MS before a
+ * refresh is scheduled or the figures dim.
+ * @param {object|null|undefined} metrics render-time metrics snapshot
+ * @param {number} [now]
+ * @returns {number} QUOTA_TTL_MS or QUOTA_IDLE_TTL_MS
+ */
+export function quotaTtlForSession(metrics, now = Date.now()) {
+  const busy = !!metrics && (
+    typeof metrics.turnStartedAt === 'number' ||
+    typeof metrics.compactingSince === 'number' ||
+    (typeof metrics.genSettledAt === 'number' && now - metrics.genSettledAt <= SETTLE_LINGER_MS)
+  );
+  return busy ? QUOTA_TTL_MS : QUOTA_IDLE_TTL_MS;
+}
 
 /**
  * On-disk quota cache schema. Version 3 adds explicit ratio entries and
@@ -56,7 +82,9 @@ export const QUOTA_CACHE_VERSION = 3;
 /**
  * Freshness contract shared by the scheduler and the renderer.
  *
- *  - fresh   (age <= QUOTA_TTL_MS): rendered as the current figure;
+ *  - fresh   (age <= ttlMs, the session-aware window — QUOTA_TTL_MS while
+ *    the session is busy, QUOTA_IDLE_TTL_MS when idle): rendered as the
+ *    current figure;
  *  - stale   (TTL < age <= QUOTA_STALE_MAX_MS): still usable — shown dimmed.
  *    Rendering splits this one logic state into two tiers via `markStale`:
  *    within QUOTA_STALE_MARK_MS ("aging") the dim is the only signal, since
@@ -73,7 +101,7 @@ export const QUOTA_CACHE_VERSION = 3;
  *
  * The refresh scheduler works one tier ahead of this display contract: it
  * schedules the detached refresh once the age passes
- * QUOTA_TTL_MS - QUOTA_REFRESH_MARGIN_MS, still inside the fresh window, so
+ * ttlMs - QUOTA_REFRESH_MARGIN_MS, still inside the fresh window, so
  * the subprocess (start + HTTPS round trip + atomic cache write) has usually
  * landed before the renderer's dim boundary arrives. A dimmed segment
  * therefore means a refresh was attempted but has not landed yet — slow
@@ -297,9 +325,12 @@ export function readQuotaCache(cachePath = QUOTA_CACHE_PATH) {
  * above).
  * @param {object|null} cache
  * @param {number} [now]
+ * @param {number} [ttlMs] session-aware fresh window (defaults to the busy
+ *   QUOTA_TTL_MS; callers with render-time metrics pass
+ *   quotaTtlForSession's tier)
  * @returns {{state: string, ageMs: number|null, markStale: boolean}}
  */
-export function quotaAge(cache, now = Date.now()) {
+export function quotaAge(cache, now = Date.now(), ttlMs = QUOTA_TTL_MS) {
   if (!cache || typeof cache.fetchedAt !== 'number' || !Number.isFinite(cache.fetchedAt)) {
     return { state: QUOTA_AGE.EXPIRED, ageMs: null, markStale: false };
   }
@@ -308,7 +339,7 @@ export function quotaAge(cache, now = Date.now()) {
     return { state: QUOTA_AGE.EXPIRED, ageMs, markStale: false };
   }
   const age = ageMs < 0 ? 0 : ageMs;
-  if (age <= QUOTA_TTL_MS) return { state: QUOTA_AGE.FRESH, ageMs, markStale: false };
+  if (age <= ttlMs) return { state: QUOTA_AGE.FRESH, ageMs, markStale: false };
   if (age <= QUOTA_STALE_MAX_MS) {
     return { state: QUOTA_AGE.STALE, ageMs, markStale: age > QUOTA_STALE_MARK_MS };
   }
@@ -326,9 +357,9 @@ export function quotaAge(cache, now = Date.now()) {
  * @param {number} [now]
  * @returns {boolean}
  */
-export function isQuotaStale(cache, now = Date.now()) {
+export function isQuotaStale(cache, now = Date.now(), ttlMs = QUOTA_TTL_MS) {
   if (!cache) return true;
-  return quotaAge(cache, now).state !== QUOTA_AGE.FRESH;
+  return quotaAge(cache, now, ttlMs).state !== QUOTA_AGE.FRESH;
 }
 
 /**
@@ -344,11 +375,11 @@ export function isQuotaStale(cache, now = Date.now()) {
  * @param {number} [now]
  * @returns {boolean}
  */
-function isQuotaRefreshDue(cache, now = Date.now()) {
+function isQuotaRefreshDue(cache, now = Date.now(), ttlMs = QUOTA_TTL_MS) {
   if (!cache) return true;
-  const { state, ageMs } = quotaAge(cache, now);
+  const { state, ageMs } = quotaAge(cache, now, ttlMs);
   if (state !== QUOTA_AGE.FRESH) return true;
-  return ageMs > QUOTA_TTL_MS - QUOTA_REFRESH_MARGIN_MS;
+  return ageMs > ttlMs - QUOTA_REFRESH_MARGIN_MS;
 }
 
 /**
@@ -534,13 +565,15 @@ export function releaseQuotaLock(lockPath = REFRESH_LOCK_PATH, token = null) {
  * records the last failure's next-attempt time, so every render process in
  * the same HUD home shares one retry schedule — per context: when
  * `contextKey` is supplied, a window recorded by a different credential
- * slot, region, or credential content never blocks the spawn. Pass no
- * statePath to disable the backoff gate. Never throws, never blocks on the
- * network.
+ * slot, region, or credential content never blocks the spawn. `ttlMs` sets
+ * the session-aware fresh window (pass quotaTtlForSession's tier); it
+ * defaults to the busy QUOTA_TTL_MS. Pass no statePath to disable the
+ * backoff gate. Never throws, never blocks on the network.
  * @param {object} [opts]
  * @param {string|null} [opts.contextKey] digest of the credential slot +
  *   endpoint + credential content the current config resolves to; omit for
  *   the legacy shared-window gate
+ * @param {number} [opts.ttlMs] session-aware fresh window for the due check
  * @returns {boolean} true when a refresh was spawned
  */
 export function ensureFreshQuota({
@@ -550,6 +583,7 @@ export function ensureFreshQuota({
   contextKey = null,
   scriptPath,
   now = Date.now(),
+  ttlMs = QUOTA_TTL_MS,
   spawnImpl = spawn,
   tokenFactory = randomUUID,
   cachedQuota = undefined,
@@ -557,7 +591,7 @@ export function ensureFreshQuota({
   let lockToken = null;
   try {
     const cache = cachedQuota === undefined ? readQuotaCache(cachePath) : cachedQuota;
-    if (!isQuotaRefreshDue(cache, now)) return false;
+    if (!isQuotaRefreshDue(cache, now, ttlMs)) return false;
     if (isRefreshBlocked(statePath, now, contextKey)) return false;
     lockToken = acquireQuotaLock({
       lockPath,

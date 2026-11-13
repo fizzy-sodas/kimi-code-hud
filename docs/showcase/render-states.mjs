@@ -55,7 +55,7 @@ const baseQuota = {
   // v0.8.3 起渲染端执行新鲜度契约：fetchedAt 缺失/非法按 EXPIRED 处理、整段
   // 隐藏（src/quota.mjs quotaAge）。fixture 必须带新鲜时间戳，否则状态墙所有
   // 行静默丢失配额段（v0.8.3–v0.8.4 的 README 图正是这样丢的）。
-  fetchedAt: NOW - 30_000,
+  fetchedAt: NOW - 3_000,
   windows: [{ label: '5h', used: 47, limit: 100, resetAt: iso(NOW + 2 * HOUR + 43 * MIN) }],
   weekly: { used: 41, limit: 100, resetAt: iso(NOW + 2 * DAY + 12 * HOUR) },
 };

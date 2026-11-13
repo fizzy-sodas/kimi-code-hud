@@ -20,6 +20,7 @@ import {
 import {
   ensureFreshQuota,
   quotaCacheMatchesContext,
+  quotaTtlForSession,
   resolveQuotaContextKey,
 } from './quota.mjs';
 import { renderHud } from './render.mjs';
@@ -128,6 +129,9 @@ export async function renderStatusLine({
         contextKey,
         cachedQuota: cached,
         now,
+        // Same session-aware fresh window the renderer's dim boundary uses,
+        // so the scheduler never aims at a different tier than the display.
+        ttlMs: quotaTtlForSession(metrics, now),
       });
     }
   } else if (typeof provider === 'string' && provider.length > 0) {

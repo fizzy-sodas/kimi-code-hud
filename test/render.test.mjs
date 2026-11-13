@@ -21,8 +21,8 @@ function baseCtx(overrides = {}) {
   return sharedCtx({
     payload: basePayload(),
     quota: {
-      // Fresh: fetched a minute's TTL ago at most.
-      fetchedAt: NOW - 30_000,
+      // Fresh: fetched well inside the TTL.
+      fetchedAt: NOW - 3_000,
       weekly: { used: 25, limit: 100, resetAt: '2026-08-02T12:00:00Z' },
       windows: [{ label: '5h', used: 31, limit: 100, resetAt: '2026-07-30T12:18:00Z' }],
     },
@@ -34,7 +34,7 @@ function baseCtx(overrides = {}) {
 
 /** Fresh quota shaped like the base default but with the caller's windows. */
 function quotaAt(weekly = null, windows = [{ label: '5h', used: 31, limit: 100, resetAt: '2026-07-30T12:18:00Z' }]) {
-  return { fetchedAt: NOW - 30_000, weekly, windows };
+  return { fetchedAt: NOW - 3_000, weekly, windows };
 }
 
 test('ratio quota displays monthly total and derives kimi as total minus code', () => {
@@ -405,7 +405,7 @@ test('dynamic terminal text drops OSC, CSI, ESC, BEL, C0, DEL, and C1 controls',
       balances: [{ currency: `EU${c1Csi}R`, total: 1 }],
     },
     quota: {
-      fetchedAt: NOW - 30_000,
+      fetchedAt: NOW - 3_000,
       weekly: null,
       windows: [{ label: `5${osc}h`, used: 31, limit: 100 }],
     },
@@ -1143,15 +1143,18 @@ test('quota one tick past the TTL dims without the [stale] marker (aging tier)',
     weekly: { used: 25, limit: 100, resetAt: '2026-08-02T12:00:00Z' },
     windows: [{ label: '5h', used: 31, limit: 100, resetAt: '2026-07-30T12:18:00Z' }],
   };
+  // The busy 10s fresh window is what this boundary pins; an idle session
+  // would still render this cache fresh (see the idle test below).
+  const busy = { tps: 47, ttftMs: 1300, turnStartedAt: NOW - 1000 };
   // Monochrome: the text reads unchanged — the aging tier deliberately has
   // no text marker, because the first frame after a few minutes away would
   // otherwise always cry wolf.
-  const [plain] = renderHud(baseCtx({ layout: 'normal', color: false, quota: aging }));
+  const [plain] = renderHud(baseCtx({ layout: 'normal', color: false, quota: aging, metrics: busy }));
   assert.ok(plain.includes('5h ███        31.00% ~2h18m · 7d ██         25.00% ~3d2h'));
   assert.ok(!plain.includes('[stale]'));
   // Color: the segment dims piecewise — muted label and figures around a
   // self-styled dim gauge whose track strip stays visible.
-  const [ansi] = renderHud(baseCtx({ layout: 'normal', color: true, quota: aging }));
+  const [ansi] = renderHud(baseCtx({ layout: 'normal', color: true, quota: aging, metrics: busy }));
   assert.match(
     ansi,
     /\x1b\[38;2;147;153;178m5h \x1b\[0m\x1b\[38;2;147;153;178m███\x1b\[0m\x1b\[48;2;69;71;90m {7}\x1b\[0m\x1b\[38;2;147;153;178m 31\.00% ~2h18m\x1b\[0m/,
@@ -1176,10 +1179,29 @@ test('quota past the one-hour mark gains the plain [stale] marker', () => {
   );
 });
 
+test('an idle session relaxes the fresh window: past the busy TTL stays bright', () => {
+  // 30s old: stale under the busy 10s window, still fresh under the idle one.
+  const quota = {
+    fetchedAt: NOW - 30_000,
+    weekly: null,
+    windows: [{ label: '5h', used: 31, limit: 100, resetAt: '2026-07-30T12:18:00Z' }],
+  };
+  const [idle] = renderHud(baseCtx({ layout: 'compact', color: true, quota }));
+  assert.ok(idle.includes('5h 31.00% ~2h18m'));
+  assert.ok(!idle.includes('\x1b[38;2;147;153;178m5h'));
+  const [busy] = renderHud(baseCtx({
+    layout: 'compact', color: true, quota,
+    metrics: { tps: 47, ttftMs: 1300, turnStartedAt: NOW - 1000 },
+  }));
+  assert.ok(busy.includes('\x1b[38;2;147;153;178m5h 31\.00% ~2h18m\x1b\[0m'));
+});
+
 test('quota age tiers hold at the exact boundaries', () => {
   const windows = [{ label: '5h', used: 31, limit: 100 }];
+  const busy = { tps: 47, turnStartedAt: NOW - 1000 };
   const at = (age) => renderHud(baseCtx({
     layout: 'compact',
+    metrics: busy,
     quota: { fetchedAt: NOW - age, weekly: null, windows },
   }))[0];
   // =TTL: fresh — normal brightness, no marker, no dim.

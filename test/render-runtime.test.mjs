@@ -9,7 +9,7 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 import { renderStatusLine, RUNTIME_BUDGET_MS } from '../src/render-runtime.mjs';
-import { resolveQuotaContextKey } from '../src/quota.mjs';
+import { resolveQuotaContextKey, QUOTA_TTL_MS, QUOTA_IDLE_TTL_MS } from '../src/quota.mjs';
 import {
   resolveProviderUsageTarget,
   writeProviderUsageCache,
@@ -215,12 +215,46 @@ test('runtime passes a context-matching quota cache to render and refresh', asyn
   assert.equal(refreshOptions.cachedQuota, cachedQuota);
   assert.equal(refreshOptions.contextKey, contextKey);
   assert.equal(refreshOptions.cachePath, paths.quotaCachePath);
+  // metrics() has no open turn: the scheduler gets the idle tier, matching
+  // the display's relaxed fresh window.
+  assert.equal(refreshOptions.ttlMs, QUOTA_IDLE_TTL_MS);
   assert.equal(gitTimeout, 218);
   assert.equal(gitCachePath, paths.gitStatusCachePath);
   assert.ok(result.line.includes('git:(main*)'));
   // The matching cache is shown as current quota.
   assert.ok(result.line.includes('5h ███        31.00%'));
   assert.ok(result.line.includes('7d ██         25.00%'));
+});
+
+test('runtime passes the busy quota TTL while a turn is generating', async () => {
+  const paths = makePaths();
+  const now = 1_000_000;
+  const env = { NO_COLOR: '1' };
+  const configText = '[models."K3"]\nprovider = "managed:kimi-code"\n';
+  const contextKey = resolveQuotaContextKey({ env, configText, kimiHome: paths.kimiHome });
+  let refreshOptions = null;
+  await renderStatusLine({
+    scriptPath: '/tmp/kimi-hud.mjs',
+    paths,
+    now,
+    env,
+    clock: () => 0,
+    dependencies: {
+      managedPluginDisabled: () => false,
+      readPayload: async () => payload(),
+      captureRuntimeSnapshot: () => ({
+        hudConfig: {},
+        configTomlText: configText,
+        tuiTomlText: '',
+        quota: { fetchedAt: now - 1_000, weekly: null, windows: [] },
+      }),
+      getMetrics: () => ({ ...metrics(), turnStartedAt: now - 500 }),
+      ensureFreshQuota: (options) => { refreshOptions = options; },
+      readGitStatus: () => ({ branch: 'main', dirty: false }),
+    },
+  });
+  assert.equal(refreshOptions.contextKey, contextKey);
+  assert.equal(refreshOptions.ttlMs, QUOTA_TTL_MS);
 });
 
 test('a [models."x".upgrade] subtable keeps provider attribution and the quota gate', async () => {
