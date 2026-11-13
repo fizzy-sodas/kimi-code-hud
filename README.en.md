@@ -15,7 +15,7 @@ Requires Node.js ≥ 18 (global `fetch`). Zero npm dependencies. See [Supported 
 In the Kimi Code TUI, run:
 
 ```
-/plugins install https://github.com/FinbackYu/kimi-code-hud
+/plugins install https://github.com/fizzy-sodas/kimi-code-hud
 ```
 
 - **Restart or start a new session** to activate: the plugin's `SessionStart` hook points `tui.toml`'s `[status_line]` at the plugin's managed copy and repairs that entry on every session start;

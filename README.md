@@ -15,7 +15,7 @@ Kimi Code CLI 的自定义底部状态栏（HUD）——零依赖 Node.js 脚本
 在 Kimi Code TUI 中运行：
 
 ```
-/plugins install https://github.com/FinbackYu/kimi-code-hud
+/plugins install https://github.com/fizzy-sodas/kimi-code-hud
 ```
 
 - 安装后**重启或开新会话**生效：`SessionStart` hook 会把 `tui.toml` 的 `[status_line]` 指向插件托管副本，并在每次会话启动时自动修复；
